@@ -92,9 +92,10 @@ fi
 # Test 7: Quick Homebridge syntax check
 print_status "Testing Homebridge plugin loading..."
 timeout 10s npm run test:config &>/dev/null
-if [ $? -eq 124 ]; then
+exit_code=$?
+if [ $exit_code -eq 124 ]; then
     print_success "Plugin loads successfully (timed out as expected)"
-elif [ $? -eq 0 ]; then
+elif [ $exit_code -eq 0 ]; then
     print_success "Plugin loads successfully"
 else
     print_error "Plugin failed to load"
