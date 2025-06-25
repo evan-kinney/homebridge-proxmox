@@ -5,33 +5,49 @@
 	"schema": {
 		"type": "object",
 		"properties": {
-			"username": {
-				"title": "Proxmox username",
-				"type": "string",
+			"servers": {
+				"title": "Proxmox Servers",
+				"type": "array",
 				"required": true,
-				"default": "root@pam",
-				"description": "Username used to log-in into proxmox dashboard, example: root@pam"
-			},
-			"password": {
-				"title": "Proxmox password",
-				"type": "string",
-				"required": true,
-				"default": "",
-				"description": "Password used to log-in into proxmox dashboard"
-			},
-			"host": {
-				"title": "Proxmox host address",
-				"type": "string",
-				"required": true,
-				"default": "localhost",
-				"description": "Host to proxmox"
-			},
-			"ssl": {
-				"title": "Authorize self signed SSL cert",
-				"type": "boolean",
-				"required": true,
-				"default": false,
-				"description": "Authorize self signed cert if you do not use a valid SSL certificat (mostly you need to check it when you're using proxmox locally)"
+				"items": {
+					"type": "object",
+					"properties": {
+						"name": {
+							"title": "Server Name",
+							"type": "string",
+							"required": true,
+							"description": "A unique name to identify this Proxmox server"
+						},
+						"username": {
+							"title": "Proxmox username",
+							"type": "string",
+							"required": true,
+							"default": "root@pam",
+							"description": "Username used to log-in into proxmox dashboard, example: root@pam"
+						},
+						"password": {
+							"title": "Proxmox password",
+							"type": "string",
+							"required": true,
+							"default": "",
+							"description": "Password used to log-in into proxmox dashboard"
+						},
+						"host": {
+							"title": "Proxmox host address",
+							"type": "string",
+							"required": true,
+							"default": "localhost",
+							"description": "Host to proxmox"
+						},
+						"ssl": {
+							"title": "Authorize self signed SSL cert",
+							"type": "boolean",
+							"required": true,
+							"default": false,
+							"description": "Authorize self signed cert if you do not use a valid SSL certificat (mostly you need to check it when you're using proxmox locally)"
+						}
+					}
+				}
 			},
 			"debug": {
 				"title": "Debug enables",

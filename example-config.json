@@ -1,0 +1,27 @@
+{
+  "platform": "HomebridgeProxmox",
+  "servers": [
+    {
+      "name": "Main Proxmox",
+      "host": "192.168.1.100",
+      "username": "root@pam",
+      "password": "your-password-here",
+      "ssl": true
+    },
+    {
+      "name": "Secondary Proxmox",
+      "host": "192.168.1.101",
+      "username": "root@pam",
+      "password": "your-other-password",
+      "ssl": false
+    },
+    {
+      "name": "Remote Proxmox",
+      "host": "proxmox.example.com",
+      "username": "homebridge@pve",
+      "password": "secure-password",
+      "ssl": true
+    }
+  ],
+  "debug": false
+}
