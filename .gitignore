@@ -1,6 +1,10 @@
 # Ignore compiled code
 dist
 
+# Development Homebridge configuration (contains sensitive data)
+.homebridge/
+!.homebridge/README.md
+
 # ------------- Defaults ------------- #
 
 # Logs

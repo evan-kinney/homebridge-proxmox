@@ -1,9 +1,8 @@
-/* eslint-disable no-empty */
 /* eslint-disable max-len */
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge'
 import os from 'node:os'
 
-import { HomebridgeProxmoxPlatform } from './platform'
+import { HomebridgeProxmoxPlatform, AccessoryType } from './platform'
 import { PLUGIN_NAME, PLATFORM_NAME } from './settings'
 
 /**
@@ -26,6 +25,7 @@ export class ProxmoxPlatformAccessory {
 		isQemu: boolean
 		isLxc: boolean
 		serverName: string
+		accessoryType: AccessoryType
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,7 +35,7 @@ export class ProxmoxPlatformAccessory {
 
 	constructor(
 		private readonly platform: HomebridgeProxmoxPlatform,
-		private readonly accessory: PlatformAccessory,
+		private readonly accessory: PlatformAccessory
 	) {
 
 		const context = this.accessory.context.device
@@ -46,6 +46,7 @@ export class ProxmoxPlatformAccessory {
 			isQemu: context.isQemu,
 			isLxc: context.isLxc,
 			serverName: context.serverName,
+			accessoryType: context.accessoryType
 		}
 		const date = new Date()
 		date.setSeconds(date.getSeconds() - 11)
@@ -55,22 +56,18 @@ export class ProxmoxPlatformAccessory {
 
 		// set accessory information
 		this.accessory.getService(this.platform.Service.AccessoryInformation)!
-			.setCharacteristic(this.platform.Characteristic.Manufacturer, os.hostname())
-			.setCharacteristic(this.platform.Characteristic.Model, os.platform())
-			.setCharacteristic(this.platform.Characteristic.SerialNumber, os.release())
+			.setCharacteristic(this.platform.Characteristic.Manufacturer, 'Proxmox VE')
+			.setCharacteristic(this.platform.Characteristic.Model, this.context.isQemu ? 'QEMU VM' : 'LXC Container')
 
-		// get the Switch service if it exists, otherwise create a new Switch service
-		// you can create multiple services for each accessory
-		this.service = this.accessory.getService(this.platform.Service.Switch) || this.accessory.addService(this.platform.Service.Switch)
+		// Create the appropriate service based on accessory type
+		this.service = this.createService()
 
 		// set the service name, this is what is displayed as the default name on the Home app
 		// in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
 		this.service.setCharacteristic(this.platform.Characteristic.Name, this.context.vmName)
 
 		// each service must implement at-minimum the "required characteristics" for the given service type
-		// see https://developers.homebridge.io/#/service/Switch
-
-		// register handlers for the On/Off Characteristic
+		// register handlers for the On/Off Characteristic (common to all service types)
 		this.service.getCharacteristic(this.platform.Characteristic.On)
 			.onSet(this.setOn.bind(this))                // SET - bind to the `setOn` method below
 			.onGet(this.getOn.bind(this))               // GET - bind to the `getOn` method below
@@ -89,44 +86,52 @@ export class ProxmoxPlatformAccessory {
 		}
 
 		for (const node of serverConnection.nodes) {
+			// Skip if this is not the node we're looking for
+			if (node.node !== this.context.nodeName) {
+				continue
+			}
+
 			const theNode = serverConnection.api.nodes.$(node.node)
-			//console.log(node.node)
 
-			if (this.context.isQemu) {
-				if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isQemu`)
-				//console.log(this.context)
-				// list Qemu VMS
-				const qemus = await theNode.qemu.$get({ full: true })
-
-				if (node.node === this.context.nodeName) {
-					const found = qemus.find(x => x.vmid === this.context.vmId && node.node === this.context.nodeName) !== undefined
+			try {
+				if (this.context.isQemu) {
+					if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isQemu`)
+					
+					// list Qemu VMS with error handling
+					const qemus = await theNode.qemu.$get({ full: true })
+					const found = qemus.find(x => x.vmid === this.context.vmId) !== undefined
 					if (found) {
 						if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isQemu -> found correct qemu`)
 						this.node = theNode
 						this.isNodeReady = true
+						return // Successfully found and configured
 					}
 				}
-			}
 
-			if (this.context.isLxc) {
-				if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isLxc`)
-				//console.log(this.context)
-				// list Lxc VMS
-				const lxcs = await theNode.lxc.$get()
-
-				if (node.node === this.context.nodeName) {
+				if (this.context.isLxc) {
+					if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isLxc`)
+					
+					// list Lxc VMS with error handling
+					const lxcs = await theNode.lxc.$get()
 					const found = lxcs.find(x => x.vmid === this.context.vmId) !== undefined
 					if (found) {
 						if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isLxc -> found correct lxc`)
 						this.node = theNode
 						this.isNodeReady = true
+						return // Successfully found and configured
 					}
 				}
+			} catch (error) {
+				this.platform.log.warn(`${this.accessory.displayName} - Node ${this.context.nodeName} is unreachable: ${error}`)
+				// Don't unregister the accessory immediately - the node might come back online
+				this.isNodeReady = false
+				return
 			}
+		}
 
-			if (!this.isNodeReady) {
-				this.platform.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [this.accessory])
-			}
+		// If we get here, either the node wasn't found or VM/container wasn't found
+		if (!this.isNodeReady) {
+			this.platform.log.warn(`${this.accessory.displayName} - VM/Container ${this.context.vmId} not found on node ${this.context.nodeName}. Keeping accessory for when node comes back online.`)
 		}
 	}
 
@@ -142,7 +147,10 @@ export class ProxmoxPlatformAccessory {
 	}
 
 	private async switchState(state: boolean) {
-		if (!this.isNodeReady) return
+		if (!this.isNodeReady) {
+			this.platform.log.warn(`${this.accessory.displayName} - Cannot switch state: node ${this.context.nodeName} is not ready`)
+			return
+		}
 		let switched = false
 
 		if (this.context.isQemu) {
@@ -150,9 +158,10 @@ export class ProxmoxPlatformAccessory {
 				if (state) await this.node.qemu.$(this.context.vmId).status.start.$post()
 				else await this.node.qemu.$(this.context.vmId).status.stop.$post()
 				switched = true
-			} catch (error) { }
-
-
+			} catch (error) {
+				this.platform.log.error(`${this.accessory.displayName} - Failed to ${state ? 'start' : 'stop'} QEMU VM: ${error}`)
+				this.isNodeReady = false // Mark node as not ready for future operations
+			}
 		}
 
 		if (this.context.isLxc) {
@@ -160,8 +169,10 @@ export class ProxmoxPlatformAccessory {
 				if (state) await this.node.lxc.$(this.context.vmId).status.start.$post()
 				else await this.node.lxc.$(this.context.vmId).status.stop.$post()
 				switched = true
-			} catch (error) { }
-
+			} catch (error) {
+				this.platform.log.error(`${this.accessory.displayName} - Failed to ${state ? 'start' : 'stop'} LXC container: ${error}`)
+				this.isNodeReady = false // Mark node as not ready for future operations
+			}
 		}
 
 		if (switched) {
@@ -200,33 +211,72 @@ export class ProxmoxPlatformAccessory {
 	 * Return state async and set it
 	 */
 	private async fetchState() {
-		if (!this.isNodeReady) return false
+		if (!this.isNodeReady) {
+			// Node is not ready, throw communication failure to show "Not Responding"
+			throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
+		}
+		
 		if (Math.abs((new Date().getTime() - this.lastUpdateDate.getTime()) / 1000) < 10) return this.state
 
 		let isOn = false
 		let status = ''
 
-		if (this.context.isQemu) {
-			const res = await this.node.qemu.$(this.context.vmId).status.current.$get()
-			status = res.status
+		try {
+			if (this.context.isQemu) {
+				const res = await this.node.qemu.$(this.context.vmId).status.current.$get()
+				status = res.status
+			}
+
+			if (this.context.isLxc) {
+				const res = await this.node.lxc.$(this.context.vmId).status.current.$get()
+				status = res.status
+			}
+
+			if (status === 'stopped') {
+				isOn = false
+			}
+			if (status === 'running') {
+				isOn = true
+			}
+
+			if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} fetchState: status is ${status}, state is: ${isOn}`)
+			this.state = isOn
+			this.service.updateCharacteristic(this.platform.Characteristic.On, isOn)
+			return isOn
+		} catch (error) {
+			this.platform.log.warn(`${this.accessory.displayName} - Failed to fetch state from node ${this.context.nodeName}: ${error}`)
+			// Mark node as not ready and throw communication failure
+			this.isNodeReady = false
+			throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
+		}
+	}
+
+	/**
+	 * Create the appropriate HomeKit service based on the accessory type
+	 */
+	private createService(): Service {
+		let service: Service
+
+		switch (this.context.accessoryType) {
+			case AccessoryType.OUTLET:
+				service = this.accessory.getService(this.platform.Service.Outlet) ||
+					this.accessory.addService(this.platform.Service.Outlet)
+				break
+			case AccessoryType.LIGHTBULB:
+				service = this.accessory.getService(this.platform.Service.Lightbulb) ||
+					this.accessory.addService(this.platform.Service.Lightbulb)
+				break
+			case AccessoryType.FAN:
+				service = this.accessory.getService(this.platform.Service.Fan) ||
+					this.accessory.addService(this.platform.Service.Fan)
+				break
+			case AccessoryType.SWITCH:
+			default:
+				service = this.accessory.getService(this.platform.Service.Switch) ||
+					this.accessory.addService(this.platform.Service.Switch)
+				break
 		}
 
-		if (this.context.isLxc) {
-			const res = await this.node.lxc.$(this.context.vmId).status.current.$get()
-			status = res.status
-		}
-
-		if (status === 'stopped') {
-			isOn = false
-		}
-		if (status === 'running') {
-			isOn = true
-		}
-
-		// eslint-disable-next-line max-len
-		if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} fetchState: status is ${status}, state is: ${isOn}`)
-		this.state = isOn
-		this.service.updateCharacteristic(this.platform.Characteristic.On, isOn)
-		return isOn
+		return service
 	}
 }

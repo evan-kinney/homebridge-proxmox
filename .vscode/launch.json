@@ -1,0 +1,54 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch file",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${file}"
+        },
+        {
+            "name": "Debug Homebridge",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/node_modules/.bin/homebridge",
+            "args": [
+                "-D",
+                "-U",
+                "${workspaceFolder}/.homebridge",
+                "-P",
+                "${workspaceFolder}"
+            ],
+            "env": {
+                "DEBUG": "homebridge-proxmox*",
+                "NODE_OPTIONS": "--trace-warnings"
+            },
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "preLaunchTask": "Build Plugin",
+            "outFiles": [
+                "${workspaceFolder}/dist/**/*.js"
+            ]
+        },
+        {
+            "name": "Debug Tests",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/node_modules/.bin/jest",
+            "args": [
+                "--runInBand",
+                "--no-cache"
+            ],
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "env": {
+                "NODE_ENV": "test"
+            }
+        }
+    ]
+}
