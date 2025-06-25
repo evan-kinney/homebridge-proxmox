@@ -17,7 +17,10 @@
 	},
 	"main": "dist/index.js",
 	"scripts": {
-		"lint": "eslint src/**.ts --max-warnings=0",
+		"lint": "npm-run-all -l -p lint:engines lint:typescript",
+		"lint:engines": "ls-engines --current",
+		"lint:engines:fix": "ls-engines --save",
+		"lint:typescript": "eslint src/**.ts --max-warnings=0",
 		"watch": "npm run build && npm link && nodemon",
 		"build": "rimraf ./dist && tsc",
 		"prepublishOnly": "npm run lint && npm run build"
@@ -35,10 +38,12 @@
 		"@typescript-eslint/eslint-plugin": "5.61.0",
 		"@typescript-eslint/parser": "5.62.0",
 		"eslint": "8.48.0",
+		"homebridge": "1.6.1",
+		"ls-engines": "^0.9.3",
 		"nodemon": "3.0.1",
+		"npm-run-all2": "^8.0.4",
 		"rimraf": "5.0.1",
 		"ts-node": "10.9.1",
-		"typescript": "5.2.2",
-		"homebridge": "1.6.1"
+		"typescript": "5.2.2"
 	}
 }
