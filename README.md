@@ -7,8 +7,8 @@
 
 # Homebridge Proxmox plugin
 
-[![npm](https://img.shields.io/npm/v/homebridge-proxmox.svg)](https://www.npmjs.com/package/@evan-kinney/homebridge-proxmox)
-[![npm](https://img.shields.io/npm/dt/homebridge-proxmox.svg)](https://www.npmjs.com/package/@evan-kinney/homebridge-proxmox)
+[![npm](https://img.shields.io/npm/v/@evan-kinney/homebridge-proxmox.svg)](https://www.npmjs.com/package/@evan-kinney/homebridge-proxmox)
+[![npm](https://img.shields.io/npm/dt/@evan-kinney/homebridge-proxmox.svg)](https://www.npmjs.com/package/@evan-kinney/homebridge-proxmox)
 
 Proxmox plugin for Homebridge. This plugin adds switches that control status (on/off) of LXC/QEMU machines across multiple Proxmox servers.
 
