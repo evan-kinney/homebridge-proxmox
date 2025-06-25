@@ -23,14 +23,34 @@
 							"type": "string",
 							"required": true,
 							"default": "root@pam",
-							"description": "Username used to log-in into proxmox dashboard, example: root@pam"
+							"description": "Username used to log-in into proxmox dashboard, example: root@pam (not used with API tokens)"
 						},
 						"password": {
 							"title": "Proxmox password",
 							"type": "string",
-							"required": true,
+							"required": false,
 							"default": "",
-							"description": "Password used to log-in into proxmox dashboard"
+							"description": "Password used to log-in into proxmox dashboard (alternative to API token)"
+						},
+						"apiToken": {
+							"title": "API Token (Alternative to password)",
+							"type": "object",
+							"required": false,
+							"properties": {
+								"tokenId": {
+									"title": "Token ID",
+									"type": "string",
+									"required": true,
+									"description": "API Token ID (format: user@realm!tokenname)"
+								},
+								"secret": {
+									"title": "Token Secret",
+									"type": "string",
+									"required": true,
+									"description": "API Token Secret"
+								}
+							},
+							"description": "Use API token instead of password for authentication (more secure)"
 						},
 						"host": {
 							"title": "Proxmox host address",
@@ -38,6 +58,15 @@
 							"required": true,
 							"default": "localhost",
 							"description": "Host to proxmox"
+						},
+						"port": {
+							"title": "Proxmox port",
+							"type": "number",
+							"required": false,
+							"default": 8006,
+							"minimum": 1,
+							"maximum": 65535,
+							"description": "Port to connect to Proxmox server (default: 8006)"
 						},
 						"ssl": {
 							"title": "Authorize self signed SSL cert",
@@ -55,6 +84,14 @@
 				"required": true,
 				"default": false,
 				"description": "Show debug messages"
+			},
+			"accessoryType": {
+				"title": "Default Accessory Type",
+				"type": "string",
+				"required": false,
+				"default": "switch",
+				"enum": ["switch", "outlet", "lightbulb", "fan"],
+				"description": "How VMs and containers appear in HomeKit (switch, outlet, lightbulb, or fan)"
 			}
 		}
 	}

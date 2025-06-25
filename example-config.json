@@ -2,26 +2,36 @@
   "platform": "HomebridgeProxmox",
   "servers": [
     {
-      "name": "Main Proxmox",
+      "name": "Proxmox Node 1",
       "host": "192.168.1.100",
+      "port": 8006,
       "username": "root@pam",
       "password": "your-password-here",
       "ssl": true
     },
     {
-      "name": "Secondary Proxmox",
+      "name": "Proxmox Node 2",
       "host": "192.168.1.101",
-      "username": "root@pam",
-      "password": "your-other-password",
-      "ssl": false
+      "port": 8006,
+      "username": "homebridge@pve",
+      "apiToken": {
+        "tokenId": "homebridge@pve!homebridge-token",
+        "secret": "your-api-token-secret-here"
+      },
+      "ssl": true
     },
     {
-      "name": "Remote Proxmox",
-      "host": "proxmox.example.com",
-      "username": "homebridge@pve",
-      "password": "secure-password",
+      "name": "Proxmox Node 3",
+      "host": "192.168.1.102",
+      "port": 8006,
+      "username": "api-user@pve",
+      "apiToken": {
+        "tokenId": "api-user@pve!monitoring",
+        "secret": "secure-api-token-secret"
+      },
       "ssl": true
     }
   ],
+  "accessoryType": "switch",
   "debug": false
 }

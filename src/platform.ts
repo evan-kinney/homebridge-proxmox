@@ -5,11 +5,23 @@ import { ProxmoxPlatformAccessory } from './platformAccessory'
 
 import proxmoxApi, { Proxmox } from 'proxmox-api'
 
+export enum AccessoryType {
+	SWITCH = 'switch',
+	OUTLET = 'outlet',
+	LIGHTBULB = 'lightbulb',
+	FAN = 'fan'
+}
+
 interface ProxmoxServer {
 	name: string
-	username: string
-	password: string
+	username?: string
+	password?: string
+	apiToken?: string | {
+		tokenId: string
+		secret: string
+	}
 	host: string
+	port?: number
 	ssl: boolean
 }
 
@@ -35,7 +47,7 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 	constructor(
 		public readonly log: Logger,
 		public readonly config: PlatformConfig,
-		public readonly api: API,
+		public readonly api: API
 	) {
 		// Initialize server connections
 		if (!this.config.servers || !Array.isArray(this.config.servers)) {
@@ -45,16 +57,64 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 
 		// Initialize connections for each server
 		for (const server of this.config.servers as ProxmoxServer[]) {
+			// Validate authentication configuration
+			if (!server.password && !server.apiToken) {
+				this.log.error(`Server ${server.name}: Either password or apiToken must be provided`)
+				continue
+			}
+
+			if (server.password && server.apiToken) {
+				this.log.warn(`Server ${server.name}: Both password and apiToken provided, using apiToken`)
+			}
+
 			// authorize self signed cert if you do not use a valid SSL certificat
 			if (server.ssl) {
 				process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 			}
 
-			const api = proxmoxApi({ host: server.host, password: server.password, username: server.username })
+			// Use specified port or default to 8006
+			const port = server.port || 8006
+
+			// Create API connection with appropriate authentication
+			let api
+			if (server.apiToken) {
+				// Handle both string and object formats for API tokens
+				if (typeof server.apiToken === 'string') {
+					this.log.error(
+						`Server ${server.name}: Simple string API tokens are not supported. ` +
+						'Please use object format with tokenId and secret.'
+					)
+					continue
+				} else {
+					// Object format with tokenId and secret
+					api = proxmoxApi({
+						host: server.host,
+						port: port,
+						tokenID: server.apiToken.tokenId,
+						tokenSecret: server.apiToken.secret
+					})
+					if (this.config.debug) {
+						this.log.debug(`Server ${server.name}: Using API token authentication`)
+					}
+				}
+			} else {
+				// Use username/password authentication
+				const username = server.username || 'root@pam'
+				api = proxmoxApi({
+					host: server.host,
+					port: port,
+					password: server.password!,
+					username: username
+				})
+				if (this.config.debug) {
+					this.log.debug(`Server ${server.name}: Using username/password authentication`)
+				}
+			}
+
 			this.serverConnections.push({
 				server,
 				api,
-				nodes: [],
+				nodes: []
 			})
 		}
 
@@ -76,26 +136,55 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 		for (const connection of this.serverConnections) {
 			try {
 				connection.nodes = await connection.api.nodes.$get()
-				this.log.info(`Connected to Proxmox server: ${connection.server.name} (${connection.server.host})`)
+				const port = connection.server.port || 8006
+				this.log.info(
+					`Connected to Proxmox server: ${connection.server.name} (${connection.server.host}:${port}) - ` +
+					'Found ${connection.nodes.length} nodes'
+				)
 			} catch (error) {
-				this.log.error(`Failed to connect to Proxmox server ${connection.server.name} (${connection.server.host}):`, error)
+				const port = connection.server.port || 8006
+				this.log.error(`Failed to connect to Proxmox server ${connection.server.name} (${connection.server.host}:${port}):`, error)
+				// Ensure nodes array is empty so this server is skipped in setup()
+				connection.nodes = []
 			}
+		}
+
+		// Log summary of connections
+		const connectedServers = this.serverConnections.filter(c => c.nodes.length > 0)
+		const failedServers = this.serverConnections.filter(c => c.nodes.length === 0)
+
+		this.log.info(`Connection summary: ${connectedServers.length} servers connected, ${failedServers.length} servers failed`)
+
+		if (connectedServers.length === 0) {
+			this.log.error('No Proxmox servers are accessible. Please check your configuration and network connectivity.')
 		}
 	}
 
 	async setup() {
+		if (this.config.debug) {
+			this.log.debug('Server connections:', this.serverConnections.map(c => ({
+				name: c.server.name,
+				nodeCount: c.nodes.length
+			})))
+		}
+
 		for (const connection of this.serverConnections) {
 			if (connection.nodes.length === 0) {
 				this.log.warn(`No nodes found for server ${connection.server.name}, skipping...`)
 				continue
 			}
 
+			this.log.info(`Processing server: ${connection.server.name} with ${connection.nodes.length} nodes`)
+
 			for (const node of connection.nodes) {
 				const theNode = connection.api.nodes.$(node.node)
 
 				try {
+					this.log.info(`Discovering VMs on node: ${node.node} (server: ${connection.server.name})`)
+
 					// list Qemu VMS
 					const qemus = await theNode.qemu.$get({ full: true })
+					this.log.info(`Found ${qemus.length} QEMU VMs on node ${node.node}`)
 
 					// iterate Qemu VMS
 					for (const qemu of qemus) {
@@ -105,12 +194,16 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 					}
 
 					const lxcs = await theNode.lxc.$get()
+					this.log.info(`Found ${lxcs.length} LXC containers on node ${node.node}`)
+
 					for (const lxc of lxcs) {
 						const status = await theNode.lxc.$(lxc.vmid).status.current.$get()
 						this.registerDevice(lxc, status.name as string, node.node, false, true, connection.server.name)
 					}
 				} catch (error) {
 					this.log.error(`Error processing node ${node.node} on server ${connection.server.name}:`, error)
+					// Continue with other nodes even if one fails
+					continue
 				}
 			}
 		}
@@ -138,7 +231,7 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 		nodeName: string,
 		isQemu: boolean,
 		isLxc: boolean,
-		serverName: string,
+		serverName: string
 	) {
 
 		// EXAMPLE ONLY
@@ -174,6 +267,7 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 				isQemu,
 				isLxc,
 				serverName,
+				accessoryType: this.getAccessoryType()
 			}
 
 			// create the accessory handler for the newly create accessory
@@ -190,5 +284,16 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 	 */
 	getServerConnection(serverName: string): ServerConnection | undefined {
 		return this.serverConnections.find(connection => connection.server.name === serverName)
+	}
+
+	/**
+	 * Get the accessory type for VMs/containers
+	 */
+	getAccessoryType(): AccessoryType {
+		const configuredType = this.config.accessoryType as string
+		if (configuredType && Object.values(AccessoryType).includes(configuredType as AccessoryType)) {
+			return configuredType as AccessoryType
+		}
+		return AccessoryType.SWITCH // Default fallback
 	}
 }
