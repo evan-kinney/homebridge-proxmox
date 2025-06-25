@@ -224,7 +224,7 @@ export class ProxmoxPlatformAccessory {
 			// Node is not ready, throw communication failure to show "Not Responding"
 			throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
 		}
-		
+
 		// Use cache unless bypassed (for polling) or cache is expired
 		if (!bypassCache && Math.abs((new Date().getTime() - this.lastUpdateDate.getTime()) / 1000) < 10) {
 			return this.state
@@ -297,7 +297,7 @@ export class ProxmoxPlatformAccessory {
 	 */
 	private startPolling() {
 		const pollingInterval = this.platform.config.pollingInterval as number
-		
+
 		// Don't start polling if disabled (0 or undefined) or interval is too short
 		if (!pollingInterval || pollingInterval < 10) {
 			if (this.platform.config.debug) {
@@ -346,7 +346,7 @@ export class ProxmoxPlatformAccessory {
 		try {
 			const previousState = this.state
 			await this.fetchState(true) // Bypass cache for polling
-			
+
 			// If state changed, update HomeKit
 			if (this.state !== previousState) {
 				this.service.updateCharacteristic(this.platform.Characteristic.On, this.state)
