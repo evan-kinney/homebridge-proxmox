@@ -1,6 +1,5 @@
 /* eslint-disable max-len */
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge'
-import os from 'node:os'
 
 import { HomebridgeProxmoxPlatform, AccessoryType } from './platform'
 import { PLUGIN_NAME, PLATFORM_NAME } from './settings'
@@ -96,7 +95,7 @@ export class ProxmoxPlatformAccessory {
 			try {
 				if (this.context.isQemu) {
 					if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isQemu`)
-					
+
 					// list Qemu VMS with error handling
 					const qemus = await theNode.qemu.$get({ full: true })
 					const found = qemus.find(x => x.vmid === this.context.vmId) !== undefined
@@ -110,7 +109,7 @@ export class ProxmoxPlatformAccessory {
 
 				if (this.context.isLxc) {
 					if (this.platform.config.debug) this.platform.log.debug(`${this.accessory.displayName} SETUP isLxc`)
-					
+
 					// list Lxc VMS with error handling
 					const lxcs = await theNode.lxc.$get()
 					const found = lxcs.find(x => x.vmid === this.context.vmId) !== undefined
@@ -215,7 +214,7 @@ export class ProxmoxPlatformAccessory {
 			// Node is not ready, throw communication failure to show "Not Responding"
 			throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
 		}
-		
+
 		if (Math.abs((new Date().getTime() - this.lastUpdateDate.getTime()) / 1000) < 10) return this.state
 
 		let isOn = false
