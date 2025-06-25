@@ -33,5 +33,6 @@
     }
   ],
   "accessoryType": "switch",
+  "pollingInterval": 30,
   "debug": false
 }

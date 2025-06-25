@@ -31,6 +31,7 @@ export class ProxmoxPlatformAccessory {
 	private node: any
 	private isNodeReady = false
 	private lastUpdateDate: Date
+	private pollingTimer?: NodeJS.Timeout
 
 	constructor(
 		private readonly platform: HomebridgeProxmoxPlatform,
@@ -71,9 +72,8 @@ export class ProxmoxPlatformAccessory {
 			.onSet(this.setOn.bind(this))                // SET - bind to the `setOn` method below
 			.onGet(this.getOn.bind(this))               // GET - bind to the `getOn` method below
 
-		/* setInterval(() => {
-			this.fetchState()
-		}, 10 * 1000) */
+		// Start background polling if configured
+		this.startPolling()
 	}
 
 	private async setup() {
@@ -131,6 +131,16 @@ export class ProxmoxPlatformAccessory {
 		// If we get here, either the node wasn't found or VM/container wasn't found
 		if (!this.isNodeReady) {
 			this.platform.log.warn(`${this.accessory.displayName} - VM/Container ${this.context.vmId} not found on node ${this.context.nodeName}. Keeping accessory for when node comes back online.`)
+		}
+	}
+
+	/**
+	 * Cleanup when accessory is removed
+	 */
+	destroy() {
+		this.stopPolling()
+		if (this.platform.config.debug) {
+			this.platform.log.debug(`${this.accessory.displayName} - Accessory destroyed, polling stopped`)
 		}
 	}
 
@@ -209,13 +219,16 @@ export class ProxmoxPlatformAccessory {
 	/**
 	 * Return state async and set it
 	 */
-	private async fetchState() {
+	private async fetchState(bypassCache = false) {
 		if (!this.isNodeReady) {
 			// Node is not ready, throw communication failure to show "Not Responding"
 			throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
 		}
-
-		if (Math.abs((new Date().getTime() - this.lastUpdateDate.getTime()) / 1000) < 10) return this.state
+		
+		// Use cache unless bypassed (for polling) or cache is expired
+		if (!bypassCache && Math.abs((new Date().getTime() - this.lastUpdateDate.getTime()) / 1000) < 10) {
+			return this.state
+		}
 
 		let isOn = false
 		let status = ''
@@ -277,5 +290,75 @@ export class ProxmoxPlatformAccessory {
 		}
 
 		return service
+	}
+
+	/**
+	 * Start background polling for VM status updates
+	 */
+	private startPolling() {
+		const pollingInterval = this.platform.config.pollingInterval as number
+		
+		// Don't start polling if disabled (0 or undefined) or interval is too short
+		if (!pollingInterval || pollingInterval < 10) {
+			if (this.platform.config.debug) {
+				this.platform.log.debug(`${this.accessory.displayName} - Polling disabled`)
+			}
+			return
+		}
+
+		if (this.platform.config.debug) {
+			this.platform.log.debug(`${this.accessory.displayName} - Starting polling every ${pollingInterval} seconds`)
+		}
+
+		// Clear any existing timer
+		this.stopPolling()
+
+		// Start new polling timer
+		this.pollingTimer = setInterval(async () => {
+			try {
+				await this.pollState()
+			} catch (error) {
+				if (this.platform.config.debug) {
+					this.platform.log.debug(`${this.accessory.displayName} - Polling error: ${error}`)
+				}
+			}
+		}, pollingInterval * 1000)
+	}
+
+	/**
+	 * Stop background polling
+	 */
+	private stopPolling() {
+		if (this.pollingTimer) {
+			clearInterval(this.pollingTimer)
+			this.pollingTimer = undefined
+		}
+	}
+
+	/**
+	 * Poll VM state and update HomeKit if changed
+	 */
+	private async pollState() {
+		if (!this.isNodeReady) {
+			return
+		}
+
+		try {
+			const previousState = this.state
+			await this.fetchState(true) // Bypass cache for polling
+			
+			// If state changed, update HomeKit
+			if (this.state !== previousState) {
+				this.service.updateCharacteristic(this.platform.Characteristic.On, this.state)
+				if (this.platform.config.debug) {
+					this.platform.log.debug(`${this.accessory.displayName} - State changed to ${this.state} (polling)`)
+				}
+			}
+		} catch (error) {
+			// Don't log errors too frequently for polling - fetchState already handles logging
+			if (this.platform.config.debug) {
+				this.platform.log.debug(`${this.accessory.displayName} - Poll failed: ${error}`)
+			}
+		}
 	}
 }

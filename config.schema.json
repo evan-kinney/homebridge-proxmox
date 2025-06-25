@@ -92,6 +92,15 @@
 				"default": "switch",
 				"enum": ["switch", "outlet", "lightbulb", "fan"],
 				"description": "How VMs and containers appear in HomeKit (switch, outlet, lightbulb, or fan)"
+			},
+			"pollingInterval": {
+				"title": "Status Polling Interval (seconds)",
+				"type": "number",
+				"required": false,
+				"default": 30,
+				"minimum": 10,
+				"maximum": 300,
+				"description": "How often to check VM/container status automatically (10-300 seconds, 0 to disable polling)"
 			}
 		}
 	}
