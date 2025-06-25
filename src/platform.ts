@@ -5,6 +5,20 @@ import { ProxmoxPlatformAccessory } from './platformAccessory'
 
 import proxmoxApi, { Proxmox } from 'proxmox-api'
 
+interface ProxmoxServer {
+	name: string
+	username: string
+	password: string
+	host: string
+	ssl: boolean
+}
+
+interface ServerConnection {
+	server: ProxmoxServer
+	api: Proxmox.Api
+	nodes: Proxmox.nodesIndex[]
+}
+
 /**
  * HomebridgePlatform
  * This class is the main constructor for your plugin, this is where you should
@@ -16,23 +30,35 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 
 	// this is used to track restored cached accessories
 	public readonly accessories: PlatformAccessory[] = []
-	public readonly proxmox: Proxmox.Api
-	public nodes: Proxmox.nodesIndex[] = []
+	public readonly serverConnections: ServerConnection[] = []
 
 	constructor(
 		public readonly log: Logger,
 		public readonly config: PlatformConfig,
 		public readonly api: API,
 	) {
-
-		// authorize self signed cert if you do not use a valid SSL certificat
-		if (this.config.ssl) {
-			process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+		// Initialize server connections
+		if (!this.config.servers || !Array.isArray(this.config.servers)) {
+			this.log.error('No servers configured. Please configure at least one Proxmox server.')
+			return
 		}
 
-		this.proxmox = proxmoxApi({ host: this.config.host, password: this.config.password, username: this.config.username })
-		if (this.config.debug) this.log.debug('Finished initializing platform')
+		// Initialize connections for each server
+		for (const server of this.config.servers as ProxmoxServer[]) {
+			// authorize self signed cert if you do not use a valid SSL certificat
+			if (server.ssl) {
+				process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+			}
 
+			const api = proxmoxApi({ host: server.host, password: server.password, username: server.username })
+			this.serverConnections.push({
+				server,
+				api,
+				nodes: [],
+			})
+		}
+
+		if (this.config.debug) this.log.debug('Finished initializing platform')
 
 		// When this event is fired it means Homebridge has restored all cached accessories from disk.
 		// Dynamic Platform plugins should only register new accessories after this event was fired,
@@ -40,29 +66,52 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 		// to start discovery of new accessories.
 		this.api.on('didFinishLaunching', async () => {
 			// run the method to discover / register your devices as accessories
-			this.nodes = await this.proxmox.nodes.$get()
+			await this.initializeConnections()
 			await this.setup()
 			if (this.config.debug) this.log.debug('Executed didFinishLaunching callback')
 		})
 	}
 
-	async setup() {
-		for (const node of this.nodes) {
-			const theNode = this.proxmox.nodes.$(node.node)
-			// list Qemu VMS
-			const qemus = await theNode.qemu.$get({ full: true })
+	async initializeConnections() {
+		for (const connection of this.serverConnections) {
+			try {
+				connection.nodes = await connection.api.nodes.$get()
+				this.log.info(`Connected to Proxmox server: ${connection.server.name} (${connection.server.host})`)
+			} catch (error) {
+				this.log.error(`Failed to connect to Proxmox server ${connection.server.name} (${connection.server.host}):`, error)
+			}
+		}
+	}
 
-			// iterate Qemu VMS
-			for (const qemu of qemus) {
-				// do some suff.
-				const status = await theNode.qemu.$(qemu.vmid).status.current.$get()
-				this.registerDevice(qemu, status.name as string, node.node, true, false)
+	async setup() {
+		for (const connection of this.serverConnections) {
+			if (connection.nodes.length === 0) {
+				this.log.warn(`No nodes found for server ${connection.server.name}, skipping...`)
+				continue
 			}
 
-			const lxcs = await theNode.lxc.$get()
-			for (const lxc of lxcs) {
-				const status = await theNode.lxc.$(lxc.vmid).status.current.$get()
-				this.registerDevice(lxc, status.name as string, node.node, false, true)
+			for (const node of connection.nodes) {
+				const theNode = connection.api.nodes.$(node.node)
+
+				try {
+					// list Qemu VMS
+					const qemus = await theNode.qemu.$get({ full: true })
+
+					// iterate Qemu VMS
+					for (const qemu of qemus) {
+						// do some suff.
+						const status = await theNode.qemu.$(qemu.vmid).status.current.$get()
+						this.registerDevice(qemu, status.name as string, node.node, true, false, connection.server.name)
+					}
+
+					const lxcs = await theNode.lxc.$get()
+					for (const lxc of lxcs) {
+						const status = await theNode.lxc.$(lxc.vmid).status.current.$get()
+						this.registerDevice(lxc, status.name as string, node.node, false, true, connection.server.name)
+					}
+				} catch (error) {
+					this.log.error(`Error processing node ${node.node} on server ${connection.server.name}:`, error)
+				}
 			}
 		}
 	}
@@ -89,13 +138,15 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 		nodeName: string,
 		isQemu: boolean,
 		isLxc: boolean,
+		serverName: string,
 	) {
 
 		// EXAMPLE ONLY
 		// A real plugin you would discover accessories from the local network, cloud services
 		// or a user-defined array in the platform config.
 
-		const uuid = this.api.hap.uuid.generate(`${vm.vmid}${name}`)
+		// Include server name in UUID to ensure uniqueness across servers
+		const uuid = this.api.hap.uuid.generate(`${serverName}-${vm.vmid}-${name}`)
 		const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid)
 
 		if (existingAccessory) {
@@ -122,6 +173,7 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 				nodeName,
 				isQemu,
 				isLxc,
+				serverName,
 			}
 
 			// create the accessory handler for the newly create accessory
@@ -131,5 +183,12 @@ export class HomebridgeProxmoxPlatform implements DynamicPlatformPlugin {
 			// link the accessory to your platform
 			this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
 		}
+	}
+
+	/**
+	 * Get server connection by server name
+	 */
+	getServerConnection(serverName: string): ServerConnection | undefined {
+		return this.serverConnections.find(connection => connection.server.name === serverName)
 	}
 }

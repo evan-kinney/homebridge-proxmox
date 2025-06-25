@@ -1,19 +1,26 @@
 {
 	"displayName": "Homebridge Proxmox",
-	"name": "homebridge-proxmox",
-	"version": "1.0.21",
+	"name": "@evan-kinney/homebridge-proxmox",
+	"version": "2.0.0",
 	"description": "Simple switch for Proxmox QEMU/LXC nodes",
 	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/KifKick/homebridge-proxmox.git"
+		"url": "https://github.com/evan-kinney/homebridge-proxmox.git"
 	},
 	"bugs": {
-		"url": "https://github.com/KifKick/homebridge-proxmox/issues"
+		"url": "https://github.com/evan-kinney/homebridge-proxmox/issues"
 	},
+	"author": {
+		"name": "KifKick"
+	},
+	"contributors": [
+		"KifKick",
+		"Evan Kinney <evandashkinney@icloud.com>"
+	],
 	"engines": {
 		"node": ">=16.18.0",
-		"homebridge": ">=1.6.0"
+		"homebridge": ">=1.9.0"
 	},
 	"main": "dist/index.js",
 	"scripts": {
@@ -39,6 +46,6 @@
 		"rimraf": "5.0.1",
 		"ts-node": "10.9.1",
 		"typescript": "5.2.2",
-		"homebridge": "1.6.1"
+		"homebridge": "1.9.0"
 	}
 }

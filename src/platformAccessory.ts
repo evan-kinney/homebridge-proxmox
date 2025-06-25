@@ -25,6 +25,7 @@ export class ProxmoxPlatformAccessory {
 		nodeName: string
 		isQemu: boolean
 		isLxc: boolean
+		serverName: string
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +45,7 @@ export class ProxmoxPlatformAccessory {
 			nodeName: context.nodeName,
 			isQemu: context.isQemu,
 			isLxc: context.isLxc,
+			serverName: context.serverName,
 		}
 		const date = new Date()
 		date.setSeconds(date.getSeconds() - 11)
@@ -79,8 +81,15 @@ export class ProxmoxPlatformAccessory {
 	}
 
 	private async setup() {
-		for (const node of this.platform.nodes) {
-			const theNode = this.platform.proxmox.nodes.$(node.node)
+		const serverConnection = this.platform.getServerConnection(this.context.serverName)
+		if (!serverConnection) {
+			this.platform.log.error(`Server connection not found for server: ${this.context.serverName}`)
+			this.platform.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [this.accessory])
+			return
+		}
+
+		for (const node of serverConnection.nodes) {
+			const theNode = serverConnection.api.nodes.$(node.node)
 			//console.log(node.node)
 
 			if (this.context.isQemu) {
