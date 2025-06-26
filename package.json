@@ -20,7 +20,7 @@
 	],
 	"engines": {
 		"node": ">= 18.17",
-		"homebridge": ">=1.9.0"
+		"homebridge": "^1.8.0 || ^2.0.0-beta.0"
 	},
 	"main": "dist/index.js",
 	"scripts": {
@@ -28,6 +28,7 @@
 		"lint:engines": "ls-engines --current",
 		"lint:engines:fix": "ls-engines --save",
 		"lint:typescript": "eslint *.ts src/**.ts --max-warnings=0",
+		"lint:typescript:fix": "eslint *.ts src/**.ts --max-warnings=0 --fix",
 		"build": "rimraf ./dist && tsc",
 		"watch": "npm run build && npm link && nodemon",
 		"dev": "npm run build && npm run link:dev && npm run homebridge:dev",
@@ -53,7 +54,7 @@
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.35.0",
 		"eslint": "^9.29.0",
-		"homebridge": "1.9.0",
+		"homebridge": "^2.0.0-beta.0",
 		"jiti": "^2.4.2",
 		"ls-engines": "^0.9.3",
 		"nodemon": "^3.1.10",
